@@ -1,0 +1,24 @@
+
+--------- For validation of email
+import re
+def is_valid_email(email):
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return re.match(pattern, email) is not None
+--------- Constrains
+create constraint emailIsUnique for (p:User) REQUIRE p.registered_mail is unique
+CREATE CONSTRAINT userTagKey FOR (p:User) REQUIRE (p.user_tag) IS NODE KEY
+CREATE CONSTRAINT userTagKey FOR (p:Post) REQUIRE (p.post_id) IS NODE KEY
+
+create constraint UserIdIsUniq for (p:User) REQUIRE p.user_tag is unique
+create constraint PostidIsUnq  for (p:Post) REQUIRE p.post_id is unique
+    
+    
+def is_valid_age(created, DOB):
+    dob = datetime.strptime(DOB, "%Y-%m-%d")
+    # created = datetime.strptime(created, "%Y-%m-%d")
+    age = created.year - dob.year - ((created.month, created.day) < (dob.month, dob.day))
+    return age >= 12
+is_valid_age(created, DOB)
+if is_valid_age(created, DOB):
+	tx.run("CREATE (n:User{name:$name,user_tag:$usertag,Bio:$bio,registered_mail:$reg_mail,created:$created,Dob:$DOB})"
+		        "RETURN n",name=name,usertag=usertag,bio=bio,reg_mail=registered_mail,created=created,DOB=DOB)
