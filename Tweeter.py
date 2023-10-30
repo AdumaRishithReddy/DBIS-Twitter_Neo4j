@@ -74,6 +74,10 @@ class HelloWorldExample:
         with self.driver.session() as session:
             session.write_transaction(self._add_quote, user1, post_id,content,media)
 
+    def addreply(self, user1, post_id,content,media):
+        with self.driver.session() as session:
+            session.write_transaction(self._add_reply, user1, post_id,content,media)
+
     def followuser(self, user1, user2):
         with self.driver.session() as session:
             session.write_transaction(self._follow_user, user1, user2)
@@ -98,6 +102,10 @@ class HelloWorldExample:
     def delquote(self, user1, post_id):
         with self.driver.session() as session:
             session.write_transaction(self._del_quote, user1, post_id)
+
+    def delreply(self, user1, post_id):
+        with self.driver.session() as session:
+            session.write_transaction(self._del_reply, user1, post_id)
 
     def delfollowuser(self, user1, user2):
         with self.driver.session() as session:
@@ -138,6 +146,11 @@ class HelloWorldExample:
     def getquote(self, user, postid):
         with self.driver.session() as session:
             quote = session.write_transaction(self._get_quote, user, postid)
+            return quote
+
+    def getreplies(self, postid):
+        with self.driver.session() as session:
+            quote = session.write_transaction(self._get_replies, postid)
             return quote
 
     def updateuser(self, olduser):
@@ -251,6 +264,17 @@ class HelloWorldExample:
             user=user, id1=id1, time=likedat, content=content, media=media
         )
 
+    def _add_reply(self, tx, user, id1,content,media):
+        likedat = datetime.datetime.now()
+        print(id1)
+        # content = input("Enter the content of quote: ")
+        # media = input("Enter media link: ")
+        tx.run(
+            "MATCH (n:User {name: $user}), (p:Post {postid: $id1}) "
+            "CREATE (n)-[:REPLIED {timestamp: $time,content:$content,media:$media}]->(p)",
+            user=user, id1=id1, time=likedat, content=content, media=media
+        )
+
     def _get_user(self, tx, name):
         result = tx.run("MATCH (a:User{name:$name}) "
                         "RETURN a", name=name)
@@ -280,6 +304,13 @@ class HelloWorldExample:
         print('HI')
         result = tx.run("MATCH (u:User{name:$user})-[r:QUOTES]->(p:Post{postid:$postid}) RETURN r", user=user,
                         postid=postid)
+        print(result)
+        return [record for record in result]
+
+    def _get_replies(self, tx, postid):
+        print('HI')
+        result = tx.run("MATCH (u:User)-[r:REPLIED]->(p:Post{postid:$postid}) RETURN u.name,r",
+                        postid=postid)
         return [record for record in result]
 
     def _del_user(self, tx, user):
@@ -307,6 +338,10 @@ class HelloWorldExample:
 
     def _del_quote(self, tx, user, postid):
         result = tx.run('MATCH (n:User{name:$name})-[r:QUOTES]->(p:Post{postid:$postid})'
+                        'DELETE r', name=user, postid=postid
+                        )
+    def _del_reply(self, tx, user, postid):
+        result = tx.run('MATCH (n:User{name:$name})-[r:REPLIED]->(p:Post{postid:$postid})'
                         'DELETE r', name=user, postid=postid
                         )
 
@@ -339,7 +374,7 @@ class HelloWorldExample:
     def _get_recommend(self, tx, user, num, distance):
         result = tx.run(
             "MATCH (n:User {name: $user})-[:FOLLOWS*2..2]->(mutual:User) "
-            "WITH mutual.name AS mutuals, COUNT(*) AS NumOfMutuals, n.name as Me "
+            "WITH mutual AS mutuals, COUNT(*) AS NumOfMutuals, n.name as Me "
             "RETURN mutuals "
             "ORDER BY NumOfMutuals DESC "
             "LIMIT $num",
@@ -351,7 +386,7 @@ class HelloWorldExample:
         result = tx.run(
             "MATCH (n:User {name: $name})-[:FOLLOWS]->(m:User) "
             "OPTIONAL MATCH (m)-[:POSTED]->(p:Post) "
-            "RETURN p.postid AS posts",
+            "RETURN p AS posts",
             name=user
         )
         return [record['posts'] for record in result]
@@ -369,11 +404,11 @@ class HelloWorldExample:
     def _get_foryou_feed(self, tx, user):
         result = tx.run(
             "MATCH (p1:User {name: $user})-[:LIKES]->(posts:Post)<-[:LIKES]-(p2:User)-[:LIKES]->(similarPosts:Post) "
-            "WHERE p2 <> p1 "
+            "WHERE p2 <> p1 AND p1>p2"
             "WITH p2, COLLECT(DISTINCT similarPosts) AS recommendations "
             "MATCH (p2)-[:LIKES]->(recommendedPosts:Post) "
             "WHERE NOT recommendedPosts IN recommendations "
-            "RETURN p2.name AS User, COLLECT(DISTINCT recommendedPosts.tweet_content) AS RecommendedPosts",
+            "RETURN p2.name AS User, COLLECT(DISTINCT recommendedPosts) AS RecommendedPosts",
             user=user
         )
         return [record['RecommendedPosts'] for record in result]
@@ -519,141 +554,342 @@ if __name__ == "__main__":
     #     greeter.delfollowuser('Joshua Anderson','Susan Thomas')
     #     print(greeter.getnumlikes('27'))
     st.title('Tweeter')
+    tab1, tab2, tab3,tab4 = st.tabs(["Basic Functions ", "Follower Recommendations", "For You Page","Following Page"])
+
     add_selectbox = st.sidebar.selectbox(
         'What Insertion task would you like to perform?',
-        ('None','NewUser', 'NewPost', 'LikePost', 'FollowUser', 'NewRepost', 'NewQuote')
+        ('None','NewUser', 'NewPost', 'LikePost', 'FollowUser', 'NewRepost', 'NewQuote','NewReply')
     )
 
     # insert_button_clicked = st.sidebar.button('Insert')
     # ins=insert_button_clicked
     # if ins:
-    if add_selectbox == 'NewUser':
-        st.write('Create a new user')
-        title = st.text_input('User name', '')
-        title4 = st.text_input('Bio', '')
-        title5=st.text_input('Enter email')
-        title3 = st.text_input('User Tag', '')
-        title2 = st.text_input('DOB year', '')
-        title1 = st.text_input('DOB month', '')
-        title0 = st.text_input('DOB date', '')
-        create_button_clicked = st.button('Create User')
-        if create_button_clicked:
-            greeter.adduser(title, title4, title3,title5, int(title2), int(title1), int(title0))
-            st.write(':blue[User created successfully!]')
-    elif add_selectbox == 'NewPost':
-        st.write('Create a new post')
-        title = st.text_input('User name', '')
-        title4 = st.text_input('Tags', '')
-        title5=st.text_input('Enter mentions')
-        title3 = st.text_input('Enter Content of Post', '')
-        # title2 = st.text_input('DOB year', '')
-        # title1 = st.text_input('DOB month', '')
-        # title0 = st.text_input('DOB date', '')
-        create_button_clicked = st.button('Create Post')
-        if create_button_clicked:
-            greeter.addpost(title, title4, title5,title3)
-            st.write(':blue[Post created successfully!]')
-    elif add_selectbox == 'LikePost':
-        st.write('Like a post')
-        title = st.text_input('User name', '')
-        title4 = st.text_input('Post Id', '')
-        create_button_clicked = st.button('Like Post')
-        if create_button_clicked:
-            greeter.likepost(title, title4)
-            st.write(':blue[Liked Post successfully!]')
-    elif add_selectbox == 'FollowUser':
-        st.write('Follow a User')
-        title = st.text_input('Username 1', '')
-        title4 = st.text_input('Username 2', '')
-        create_button_clicked = st.button('Follow User')
-        if create_button_clicked:
-            greeter.followuser(title, title4)
-            st.write(f':blue[Following {title4} successfully!]')
-    elif add_selectbox == 'NewRepost':
-        st.write('Added a Repost')
-        title = st.text_input('Username', '')
-        title4 = st.text_input('Post Id', '')
-        create_button_clicked = st.button('Add Repost')
-        if create_button_clicked:
-            greeter.addrepost(title, title4)
-            st.write(':blue[Added Repost successfully!]')
-    elif add_selectbox == 'NewQuote':
-        st.write('Added a Quote')
-        title = st.text_input('Username', '')
-        title4 = st.text_input('Post Id', '')
-        title2=st.text_input('Content','')
-        title3=st.text_input('Media','')
-        create_button_clicked = st.button('Add Quote')
-        if create_button_clicked:
-            greeter.addquote(title, title4,title2,title3)
-            st.write(':blue[Added Quote successfully!]')
-    elif add_selectbox == 'None':
-        pass
+    with tab1:
+        if add_selectbox == 'NewUser':
+            st.write('Create a new user')
+            title = st.text_input('User name', '')
+            title4 = st.text_input('Bio', '')
+            title5=st.text_input('Enter email')
+            title3 = st.text_input('User Tag', '')
+            title2 = st.text_input('DOB year', '')
+            title1 = st.text_input('DOB month', '')
+            title0 = st.text_input('DOB date', '')
+            create_button_clicked = st.button('Create User')
+            if create_button_clicked:
+                greeter.adduser(title, title4, title3,title5, int(title2), int(title1), int(title0))
+                st.write(':blue[User created successfully!]')
+        elif add_selectbox == 'NewPost':
+            st.write('Create a new post')
+            title = st.text_input('User name', '')
+            title4 = st.text_input('Tags', '')
+            title5=st.text_input('Enter mentions')
+            title3 = st.text_input('Enter Content of Post', '')
+            # title2 = st.text_input('DOB year', '')
+            # title1 = st.text_input('DOB month', '')
+            # title0 = st.text_input('DOB date', '')
+            create_button_clicked = st.button('Create Post')
+            if create_button_clicked:
+                greeter.addpost(title, title4, title5,title3)
+                st.write(':blue[Post created successfully!]')
+        elif add_selectbox == 'LikePost':
+            st.write('Like a post')
+            title = st.text_input('User name', '')
+            title4 = st.text_input('Post Id', '')
+            create_button_clicked = st.button('Like Post')
+            if create_button_clicked:
+                greeter.likepost(title, title4)
+                st.write(':blue[Liked Post successfully!]')
+        elif add_selectbox == 'FollowUser':
+            st.write('Follow a User')
+            title = st.text_input('Username 1', '')
+            title4 = st.text_input('Username 2', '')
+            create_button_clicked = st.button('Follow User')
+            if create_button_clicked:
+                greeter.followuser(title, title4)
+                st.write(f':blue[Following {title4} successfully!]')
+        elif add_selectbox == 'NewRepost':
+            st.write('Added a Repost')
+            title = st.text_input('Username', '')
+            title4 = st.text_input('Post Id', '')
+            create_button_clicked = st.button('Add Repost')
+            if create_button_clicked:
+                greeter.addrepost(title, title4)
+                st.write(':blue[Added Repost successfully!]')
+        elif add_selectbox == 'NewQuote':
+            st.write('Added a Quote')
+            title = st.text_input('Username', '')
+            title4 = st.text_input('Post Id', '')
+            title2=st.text_input('Content','')
+            title3=st.text_input('Media','')
+            create_button_clicked = st.button('Add Quote')
+            if create_button_clicked:
+                greeter.addquote(title, title4,title2,title3)
+                st.write(':blue[Added Quote successfully!]')
+        elif add_selectbox == 'NewReply':
+            st.write('Added a Reply')
+            title = st.text_input('Username', '')
+            title4 = st.text_input('Post Id', '')
+            title2=st.text_input('Content','')
+            title3=st.text_input('Media','')
+            create_button_clicked = st.button('Reply')
+            if create_button_clicked:
+                greeter.addreply(title, title4,title2,title3)
+                st.write(':blue[Added Reply successfully!]')
+        elif add_selectbox == 'None':
+            pass
 
-    get_selectbox = st.sidebar.selectbox(
-        'What Insertion task would you like to perform?',
-        ('None','GetUser', 'GetPost', 'GetLikedPosts', 'GetFollowers', 'GetReposts', 'GetQuote','GetAllUsers','GetAllPosts','PostByUser')
-    )
+        get_selectbox = st.sidebar.selectbox(
+            'What Insertion task would you like to perform?',
+            ('None','GetUser', 'GetPost', 'GetLikedPosts', 'GetFollowers', 'GetReposts', 'GetQuote','GetReplies','GetAllUsers','GetAllPosts','PostByUser')
+        )
 
-    # insert_button_clicked = st.sidebar.button('Insert')
-    # ins=insert_button_clicked
-    # if ins:
-    if get_selectbox == 'GetUser':
-        st.write('View profile of User')
-        title_n = st.text_input('Username', '')
-        get_button_clicked = st.button('Get User')
-        if get_button_clicked:
-            st.write(greeter.getuser(title_n))
-            st.write(type(greeter.getuser(title_n)))
-            st.write(':blue[User Read successfully!]')
-    elif get_selectbox == 'GetPost':
-        st.write('View post')
-        title_n = st.text_input('Post Id', '')
-        # title2 = st.text_input('DOB year', '')
-        # title1 = st.text_input('DOB month', '')
-        # title0 = st.text_input('DOB date', '')
-        get_button_clicked = st.button('View Post')
-        if get_button_clicked:
-            greeter.getpost(title_n)
-            st.write(':blue[Post Read successfully!]')
-    elif get_selectbox == 'GetLikedPosts':
-        st.write('Posts Liked By User')
-        title_n = st.text_input('User name', '')
-        # title4_n = st.text_input('Post Id', '')
-        get_button_clicked = st.button('View Liked Posts')
-        if get_button_clicked:
-            greeter.getlikedposts(title_n)
-            st.write(':blue[Liked Post Read successfully!]')
-    elif get_selectbox == 'GetFollowers':
-        st.write('Get Followers')
-        title_n = st.text_input('Username 1', '')
-        # title4_n = st.text_input('Username 2', '')
-        get_button_clicked = st.button('Get Following')
-        if get_button_clicked:
-            greeter.getfollowers(title_n)
-            st.write(f':blue[Showing Followers {title_n} successfully!]')
-    elif get_selectbox == 'GetReposts':
-        st.write('Get Repost')
-        title_n = st.text_input('Username', '')
-        title4_n = st.text_input('Post Id', '')
-        get_button_clicked = st.button('Add Repost')
-        if get_button_clicked:
-            greeter.addrepost(title_n, title4_n)
-            st.write(':blue[Added Repost successfully!]')
-    elif get_selectbox == 'GetQuote':
-        st.write('Added a Quote')
-        title_n = st.text_input('Username', '')
-        title4_n = st.text_input('Post Id', '')
-        title2_n = st.text_input('Content', '')
-        title3_n = st.text_input('Media', '')
-        get_button_clicked = st.button('Add Quote')
-        if get_button_clicked:
-            greeter.addquote(title_n, title4_n, title2_n, title3_n)
-            st.write(':blue[Added Quote successfully!]')
-    # elif add_selectbox =='GetAllUsers':
-    #
-    elif add_selectbox == 'None':
-        pass
+        # insert_button_clicked = st.sidebar.button('Insert')
+        # ins=insert_button_clicked
+        # if ins:
+        if get_selectbox == 'GetUser':
+            st.write('View profile of User')
+            title_n = st.text_input('Username', '')
+            get_button_clicked = st.button('Get User')
+            if get_button_clicked:
+                try:
+                    x = greeter.getuser(title_n)
+                    st.write('**Username:** '+ x['name'])
+                    st.write('**User Tag:** ' + x['user_tag'])
+                    st.write('**Date Of Birth:** ' +str( x['Dob']))
+                    st.write('**Email:** ' + x['registered_mail'])
+                    st.write('**Bio:** ' + x['Bio'])
+                    st.write('**Profile created on:** ' + str(x['created']))
+                    # st.write(type(greeter.getuser(title_n)))
+                    st.write(':blue[User Read successfully!]')
+                except:
+                    st.write("no such user present")
+        elif get_selectbox == 'GetPost':
+            st.write('View post')
+            title_n = st.text_input('Post Id', '')
+            # title2 = st.text_input('DOB year', '')
+            # title1 = st.text_input('DOB month', '')
+            # title0 = st.text_input('DOB date', '')
+            get_button_clicked = st.button('View Post')
+            if get_button_clicked:
+                # print(title_n)
+                x = greeter.getpost(title_n)
+                # st.write(x)
+                st.write('**Postid:** ' + x['postid'])
+                st.write('**HashTags:** '+x['hash_tags'])
+                st.write('**Mentions:** '+x['mentions'])
+                st.write('**Tweet Content:** '+x['tweet_content'])
+                st.write(':blue[Post Read successfully!]')
+        elif get_selectbox == 'GetLikedPosts':
+            st.write('Posts Liked By User')
+            title_n = st.text_input('User name', '')
+            # title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('View Liked Posts')
+            st.write(title_n)
+            if get_button_clicked:
+                x = greeter.getlikedposts(title_n)
+                # st.write(x)
+                # st.write(len(x))
+                for i in range(len(x)):
+                    st.write("**Postid** " + x[i][0])
+                    st.write("**Content:** " + x[i][1])
+                st.write(':blue[Liked Post Read successfully!]')
+        elif get_selectbox == 'GetFollowers':
+            st.write('Get Followers')
+            title_n = st.text_input('Username 1', '')
+            # title4_n = st.text_input('Username 2', '')
+            get_button_clicked = st.button('Get Following')
+            st.write(title_n + " followers are")
+            if get_button_clicked:
+                x = greeter.getfollowers(title_n)
+                # st.write(x)
+                for i in range(len(x)):
+                    st.write(x[i]['name'])
+                st.write(f':blue[Showing Followers {title_n} successfully!]')
+        elif get_selectbox == 'GetReposts':#there is a diffrence between add and get
+            st.write('Get Repost')
+            title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Get Repost')
+            if get_button_clicked:
+                x = greeter.getrepost(title_n, title4_n)
+                st.write(x)
+                st.write(':blue[Fetched Repost successfully!]')
+        elif get_selectbox == 'GetQuote':
+            st.write('Added a Quote')
+            title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Get Quote')
+            if get_button_clicked:
+                x = st.write(greeter.getquote(title_n, title4_n))
+                st.write(x)
+                st.write(':blue[Added Quote successfully!]')
+        elif get_selectbox == 'GetReplies':
+            st.write('View Replies for a post')
+            # title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Get Replies')
+            if get_button_clicked:
+                st.write(greeter.getreplies(title4_n))
+                st.write(':blue[Fetched Reply successfully!]')
+        elif get_selectbox == 'GetAllUsers':
+            st.write('View All Users')
+            get_button_clicked = st.button('Get Users')
+            if get_button_clicked:
+                x=greeter.get_all_users()
+                st.write(':red[Read Users successfully!]')
+                for i in x:
+                    with st.expander(f':green[User: {i["user_tag"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        st.write('**Username:** ' + i['name'])
+                        st.write('**User Tag:** ' + i['user_tag'])
+                        st.write('**Date Of Birth:** ' + str(i['Dob']))
+                        st.write('**Email:** ' + i['registered_mail'])
+                        st.write('**Bio:** ' + i['Bio'])
+                        st.write('**Profile created on:** ' + str(i['created']))
+
+        elif get_selectbox == 'GetAllPosts':
+            st.write('View All Posts')
+            get_button_clicked = st.button('Get Posts')
+            if get_button_clicked:
+                y=greeter.get_all_posts()
+                for i in y:
+                    with st.expander(f':green[Post Id: {i["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        # st.write('**Postid:** ' + i['postid'])
+                        st.write('**HashTags:** ' + i['hash_tags'])
+                        st.write('**Mentions:** ' + i['mentions'])
+                        st.write('**Tweet Content:** ' + i['tweet_content'])
+                st.write(':blue[Read Posts successfully!]')
+        elif get_selectbox == 'PostByUser':
+            st.write('View All Posts By User')
+            title_n = st.text_input('Username', '')
+            get_button_clicked = st.button('Get Posts')
+            if get_button_clicked:
+                y=greeter.postbyuser(title_n)
+                if len(y)==0:
+                    st.write(":red[User hasn't posted Anything Yet]")
+                for i in y:
+                    with st.expander(f':green[Post Id: {i["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        # st.write('**Postid:** ' + i['postid'])
+                        st.write('**HashTags:** ' + i['hash_tags'])
+                        st.write('**Mentions:** ' + i['mentions'])
+                        st.write('**Tweet Content:** ' + i['tweet_content'])
+                st.write(':blue[Read Posts successfully!]')
+        # elif add_selectbox =='GetAllUsers':
+        #
+        elif get_selectbox == 'None':
+            pass
+
+        delete_selectbox = st.sidebar.selectbox(
+            'What Deleting task would you like to perform?',
+            ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote','DeleteReply')
+        )
+
+        # insert_button_clicked = st.sidebar.button('Insert')
+        # ins=insert_button_clicked
+        # if ins:
+        if delete_selectbox == 'DeleteUser':
+            st.write('DELETE User')
+            title_n = st.text_input('Username', '')
+            get_button_clicked = st.button('Delete User')
+            if get_button_clicked:
+                # if()
+                try:
+                    x=greeter.getuser(title_n)
+                    name=x['name']
+                    greeter.deluser(title_n)
+                    st.write(':blue[User Deleted successfully!]')
+                except:
+                    st.write('User not present')
+                # greeter.deluser(title_n)
+                # st.write(':blue[User Deleted successfully!]')
+        elif delete_selectbox == 'DeletePost':
+            st.write('Delete post')
+            title_n = st.text_input('Post Id', '')
+            # title2 = st.text_input('DOB year', '')
+            # title1 = st.text_input('DOB month', '')
+            # title0 = st.text_input('DOB date', '')
+            get_button_clicked = st.button('Delete Post')
+            if get_button_clicked:
+                greeter.delpost(title_n)
+                st.write(':blue[Post Deleted successfully!]')
+        elif delete_selectbox == 'RemoveLikes':
+            st.write('Stop Liking a Post')
+            title_n = st.text_input('User name', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Remove Liked Post')
+            if get_button_clicked:
+                greeter.dellikepost(title_n,title4_n)
+                st.write(':blue[Liked Post Removed successfully!]')
+        elif delete_selectbox == 'StopFollowing':
+            st.write('Stop Followers')
+            title_n = st.text_input('Username 1', '')
+            # title4_n = st.text_input('Username 2', '')
+            get_button_clicked = st.button('Stop Following')
+            if get_button_clicked:
+                greeter.delfollowuser(title_n)
+                st.write(f':blue[Showing Followers {title_n} successfully!]')
+        elif delete_selectbox == 'DeleteReposts':
+            st.write('Get Repost')
+            title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Delete Repost')
+            if get_button_clicked:
+                greeter.delrepost(title_n, title4_n)
+                st.write(':blue[Added Repost successfully!]')
+        elif delete_selectbox == 'DeleteQuote':
+            st.write('Added a Quote')
+            title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Delete Quote')
+            if get_button_clicked:
+                st.write(greeter.delquote(title_n, title4_n))
+                st.write(':blue[Added Quote successfully!]')
+        elif delete_selectbox == 'DeleteReply':
+            st.write('View Replies for a post')
+            title_n = st.text_input('Username', '')
+            title4_n = st.text_input('Post Id', '')
+            get_button_clicked = st.button('Delete Replies')
+            if get_button_clicked:
+                st.write(greeter.delreply(title_n,title4_n))
+                st.write(':blue[Read Reply successfully!]')
+        # elif add_selectbox =='GetAllUsers':
+        #
+        elif delete_selectbox == 'None':
+            pass
+
+    with tab2:
+        name=st.text_input('Enter your Username','')
+        buttona=st.button("Recommend Followers")
+        if(buttona):
+            x=greeter.recommendfollowers(name)
+            for i in x:
+                with st.expander(f':green[You might know {i["name"]} ]'):
+                    # st.write(f':green[User: {i["user_tag"]}] ')
+                    st.write('**Username:** ' + i['name'])
+                    st.write('**User Tag:** ' + i['user_tag'])
+                    st.write('**Date Of Birth:** ' + str(i['Dob']))
+                    st.write('**Email:** ' + i['registered_mail'])
+                    st.write('**Bio:** ' + i['Bio'])
+                    st.write('**Profile created on:** ' + str(i['created']))
+    with tab3:
+        name = st.text_input('Enter Username', '')
+        buttona = st.button("Get Foryou feed")
+        if (buttona):
+            x=greeter.ForYouFeed(name)
+            # ias=set(x)
+            # x=list(ias)
+            st.write(type(x))
+            for i in x:
+                # st.write(i)
+                for j in i:
+                    with st.expander(f':green[Post Id: {j["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        st.write('**Postid:** ' + j['postid'])
+                        st.write('**HashTags:** ' + j['hash_tags'])
+                        st.write('**Mentions:** ' + j['mentions'])
+                        st.write('**Tweet Content:** ' + j['tweet_content'])
 
     # else:
     #     st.write('Goodbye')
