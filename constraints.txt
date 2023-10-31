@@ -1,0 +1,1 @@
+create constraint UserTagIsUnq for (p:User) require p.user_tag is unique

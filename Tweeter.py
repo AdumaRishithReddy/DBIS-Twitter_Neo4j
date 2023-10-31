@@ -157,9 +157,9 @@ class HelloWorldExample:
             quote = session.write_transaction(self._get_replies, postid)
             return quote
 
-    def updateuser(self, olduser):
+    def updateuser(self, olduser,upt,d=None,b=None,u=None):
         with self.driver.session() as session:
-            session.write_transaction(self._update_user, olduser)
+            session.write_transaction(self._update_user, olduser,upt,d,b,u)
 
     # Advanced Features
     #     Follower Recommendation system
@@ -381,20 +381,20 @@ class HelloWorldExample:
                         )
         return result.single()[0]
 
-    def _update_user(self, tx, olduser):
-        upt = input("What do you want to update(Username/Bio/DOB)")
-        if (upt == 'Username'):
-            newuser = input('Enter new username: ')
-            result = tx.run('MATCH (p:User {name:$olduser})'
-                            'SET p.name = $newuser', olduser=olduser, newuser=newuser
-                            )
-        elif (upt == 'Bio'):
-            bio = input('Enter your new bio: ')
+    def _update_user(self, tx, olduser, upt,d=None,b=None,u=None):
+        if upt == 'Username':
+            result = tx.run('MATCH (p:User {name: $olduser})'
+                                'SET p.name = $newuser', olduser=olduser, newuser=u)
+        elif upt == 'Bio':
             result = tx.run('MATCH (p:User {name: $user})'
-                            'SET p.Bio=$bio', user=olduser, bio=bio)
+                                'SET p.Bio=$bio', user=olduser, bio=b)
+        elif upt == 'DOB':
+            # form = st.form(key='my_form')
 
-    #         elif(upt=='DOB'):
-
+            # submit_button = form.form_submit_button('Update DOB')
+            result = tx.run('MATCH (p:User {name: $user})'
+                            'SET p.Dob=$dob', user=olduser, dob=d)
+            # if submit_button:
     # Advanced functions Implementation
     def _get_recommend(self, tx, user, num, distance):
         result = tx.run(
@@ -601,6 +601,41 @@ if __name__ == "__main__":
     # insert_button_clicked = st.sidebar.button('Insert')
     # ins=insert_button_clicked
     # if ins:
+    with tab0:
+        import streamlit as st
+        import numpy as np
+        import time
+
+        st.subheader('User Login??', divider='rainbow')
+        una = st.text_input("Userid", "")
+        # if(una!=""):
+        #     with st.spinner('Setting up the User details'):
+        #         time.sleep(8)
+        st.write(f"Accesing the UI as {una}")
+        with st.chat_message("user"):
+            st.write("""
+    Our choice of Neo4j as the database for our application is primarily due to its effectiveness in managing social media networks. Neo4j's strength lies in its ability to handle a substantial number of connections and relationships, particularly with properties. This flexibility is crucial for our database modeling, as it differs from traditional relational databases, which are more rigid in their schema design, and it is mainly used for organized data.
+
+    Functionality Highlights:
+
+    - Adding and Managing User Accounts: Users can easily create accounts using their email, ensuring a seamless onboarding process. Additionally, they can delete their accounts if they choose to leave the platform, with a secure login feature providing an extra layer of authentication and security.
+
+    - Following Page: Users have access to a centralized feed displaying posts from the accounts they follow, facilitating easy access to the latest updates from their network.
+
+    - ForYou Page Recommendations: Our application offers a personalized "ForYou" page that recommends content based on the likes of their followers, as well as their posts, reposts, and replies. This feature enhances the user experience by providing tailored content suggestions.
+
+    - Follow Recommendations: Users can explore new accounts to follow through recommendations that extend 1-2 hops from their followers, expanding their network and introducing them to potentially interesting content.
+
+    - Profile View: Users can explore other users' profiles by typing in their names. This feature allows users to view typed posts, reposts, replies, quotes, likes, and more, offering a comprehensive view of their activity on the platform.
+
+    - Followers and Following: Our application allows users to see who is following a particular user, as well as whom that user is following. This transparency promotes stronger connections within the network.
+
+    - Birthday Balloons: A unique and delightful feature where balloons pop up on a user's profile on their birthday, adding a fun and personal touch to the application, making it more engaging and interactive.
+
+    - Creating and Managing Posts: Users can create posts, reply to, repost, and quote posts made by other users. This interactive feature fosters lively conversations and information sharing within the platform.
+    """
+                     )
+
     with tab1:
         st.subheader('Insertion Tasks', divider='rainbow')
         add_selectbox = st.selectbox(
@@ -611,15 +646,15 @@ if __name__ == "__main__":
             st.write('Create a new user')
             title = st.text_input('User name', '')
             title4 = st.text_input('Bio', '')
-            title5=st.text_input('Enter email')
+            title5 = st.text_input('Enter email')
             title3 = st.text_input('User Tag', '')
             title2 = st.text_input('DOB year', '')
             title1 = st.text_input('DOB month', '')
             title0 = st.text_input('DOB date', '')
             create_button_clicked = st.button('Create User')
             if create_button_clicked:
-                x=greeter.adduser(title, title4, title3,title5, int(title2), int(title1), int(title0))
-                if(x):
+                x = greeter.adduser(title, title4, title3, title5, int(title2), int(title1), int(title0))
+                if (x):
                     st.write(':blue[User created successfully!]')
                 else:
                     st.write('Incorrect details')
@@ -627,14 +662,14 @@ if __name__ == "__main__":
             st.write('Create a new post')
             title = st.text_input('User name', '')
             title4 = st.text_input('Tags', '')
-            title5=st.text_input('Enter mentions')
+            title5 = st.text_input('Enter mentions')
             title3 = st.text_input('Enter Content of Post', '')
             # title2 = st.text_input('DOB year', '')
             # title1 = st.text_input('DOB month', '')
             # title0 = st.text_input('DOB date', '')
             create_button_clicked = st.button('Create Post')
             if create_button_clicked:
-                greeter.addpost(title, title4, title5,title3)
+                greeter.addpost(title, title4, title5, title3)
                 st.write(':blue[Post created successfully!]')
         elif add_selectbox == 'LikePost':
             st.write('Like a post')
@@ -664,28 +699,29 @@ if __name__ == "__main__":
             st.write('Added a Quote')
             title = st.text_input('Username', '')
             title4 = st.text_input('Post Id', '')
-            title2=st.text_input('Content','')
-            title3=st.text_input('Media','')
+            title2 = st.text_input('Content', '')
+            title3 = st.text_input('Media', '')
             create_button_clicked = st.button('Add Quote')
             if create_button_clicked:
-                greeter.addquote(title, title4,title2,title3)
+                greeter.addquote(title, title4, title2, title3)
                 st.write(':blue[Added Quote successfully!]')
         elif add_selectbox == 'NewReply':
             st.write('Added a Reply')
             title = st.text_input('Username', '')
             title4 = st.text_input('Post Id', '')
-            title2=st.text_input('Content','')
-            title3=st.text_input('Media','')
+            title2 = st.text_input('Content', '')
+            title3 = st.text_input('Media', '')
             create_button_clicked = st.button('Reply')
             if create_button_clicked:
-                greeter.addreply(title, title4,title2,title3)
+                greeter.addreply(title, title4, title2, title3)
                 st.write(':blue[Added Reply successfully!]')
         elif add_selectbox == 'None':
             pass
         st.subheader('Fetching Tasks', divider='rainbow')
         get_selectbox = st.selectbox(
             'What Insertion task would you like to perform?',
-            ('None','GetUser', 'GetPost', 'GetLikedPosts', 'GetFollowers', 'GetReposts', 'GetQuote','GetReplies','GetAllUsers','GetAllPosts','PostByUser')
+            ('None', 'GetUser', 'GetPost', 'GetLikedPosts', 'GetFollowers', 'GetReposts', 'GetQuote', 'GetReplies',
+             'GetAllUsers', 'GetAllPosts', 'PostByUser')
         )
 
         # insert_button_clicked = st.sidebar.button('Insert')
@@ -698,16 +734,19 @@ if __name__ == "__main__":
             if get_button_clicked:
                 try:
                     x = greeter.getuser(title_n)
-                    st.write('**Username:** '+ x['name'])
-                    st.write('**User Tag:** ' + x['user_tag'])
-                    st.write('**Date Of Birth:** ' +str( x['Dob']))
-                    st.write('**Email:** ' + x['registered_mail'])
-                    st.write('**Bio:** ' + x['Bio'])
-                    st.write('**Profile created on:** ' + str(x['created']))
-                    # st.write(type(greeter.getuser(title_n)))
-                    st.write(':blue[User Read successfully!]')
+                    if (len(x) > 0):
+                        st.write('**Username:** ' + x['name'])
+                        st.write('**User Tag:** ' + x['user_tag'])
+                        st.write('**Date Of Birth:** ' + str(x['Dob']))
+                        st.write('**Email:** ' + x['registered_mail'])
+                        st.write('**Bio:** ' + x['Bio'])
+                        st.write('**Profile created on:** ' + str(x['created']))
+                        # st.write(type(greeter.getuser(title_n)))
+                        st.write(':blue[User Read successfully!]')
+                    else:
+                        st.write('No such user present')
                 except:
-                    st.write("no such user present")
+                    st.write("Cannot retrieve user" + title_n)
         elif get_selectbox == 'GetPost':
             st.write('View post')
             title_n = st.text_input('Post Id', '')
@@ -718,15 +757,19 @@ if __name__ == "__main__":
             if get_button_clicked:
                 # print(title_n)
                 try:
+
                     x = greeter.getpost(title_n)
                     # st.write(x)
-                    st.write('**Postid:** ' + x['postid'])
-                    st.write('**HashTags:** '+x['hash_tags'])
-                    st.write('**Mentions:** '+x['mentions'])
-                    st.write('**Tweet Content:** '+x['tweet_content'])
-                    st.write(':blue[Post Read successfully!]')
+                    if (len(x) > 0):
+                        st.write('**Postid:** ' + x['postid'])
+                        st.write('**HashTags:** ' + x['hash_tags'])
+                        st.write('**Mentions:** ' + x['mentions'])
+                        st.write('**Tweet Content:** ' + x['tweet_content'])
+                        st.write(':blue[Post Read successfully!]')
+                    else:
+                        st.write('No posts yet')
                 except:
-                    st.write('No such post')
+                    st.write('Cannot retrieve Post')
         elif get_selectbox == 'GetLikedPosts':
             st.write('Posts Liked By User')
             title_n = st.text_input('User name', '')
@@ -738,12 +781,15 @@ if __name__ == "__main__":
                     x = greeter.getlikedposts(title_n)
                     # st.write(x)
                     # st.write(len(x))
-                    for i in range(len(x)):
-                        st.write("**Postid** " + x[i][0])
-                        st.write("**Content:** " + x[i][1])
-                    st.write(':blue[Liked Post Read successfully!]')
+                    if (len(x) > 0):
+                        for i in range(len(x)):
+                            st.write("**Postid** " + x[i][0])
+                            st.write("**Content:** " + x[i][1])
+                        st.write(':blue[Liked Post Read successfully!]')
+                    else:
+                        st.write('No Liked posts yet!')
                 except:
-                    st.write('No Liked post')
+                    st.write('Cannot retrieve Liked Posts of user:' + title_n)
         elif get_selectbox == 'GetFollowers':
             st.write('Get Followers')
             title_n = st.text_input('Username 1', '')
@@ -751,90 +797,130 @@ if __name__ == "__main__":
             get_button_clicked = st.button('Get Following')
             st.write(title_n + " followers are")
             if get_button_clicked:
-                x = greeter.getfollowers(title_n)
-                # st.write(x)
-                for i in range(len(x)):
-                    st.write(x[i]['name'])
-                st.write(f':blue[Showing Followers {title_n} successfully!]')
-        elif get_selectbox == 'GetReposts':#there is a diffrence between add and get
+                try:
+                    x = greeter.getfollowers(title_n)
+                    # st.write(x)
+                    if (x > 0):
+                        for i in range(len(x)):
+                            st.write(x[i]['name'])
+                        st.write(f':blue[Showing Followers {title_n} successfully!]')
+                    else:
+                        st.write('No One Following ' + title_n)
+                except:
+                    st.write('Cannot retrieve followers')
+        elif get_selectbox == 'GetReposts':  # there is a diffrence between add and get
             st.write('Get Repost')
             title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Get Repost')
             if get_button_clicked:
-                x = greeter.getrepost(title_n, title4_n)
-                st.write(x)
-                st.write(':blue[Fetched Repost successfully!]')
+                try:
+                    x = greeter.getrepost(title_n, title4_n)
+                    if (x > 0):
+                        st.write(x)
+                        st.write(':blue[Fetched Repost successfully!]')
+                    else:
+                        st.write('No reposts by ' + title_n)
+                except:
+                    st.write('Cannot retrieve Repsots')
         elif get_selectbox == 'GetQuote':
             st.write('Added a Quote')
             title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Get Quote')
             if get_button_clicked:
-                x = greeter.getquote(title_n, title4_n)
-                st.write(x)
-                st.write(':blue[Added Quote successfully!]')
+                try:
+                    x = greeter.getquote(title_n, title4_n)
+                    if (x > 0):
+                        st.write(x)
+                        st.write(':blue[Added Quote successfully!]')
+                    else:
+                        st.write('No Quotes by ' + title_n)
+                except:
+                    st.write('Cannot retrieve Quotes')
         elif get_selectbox == 'GetReplies':
             st.write('View Replies for a post')
-            # title_n = st.text_input('Username', '')
+            title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Get Replies')
             if get_button_clicked:
-                st.write(greeter.getreplies(title4_n))
-                st.write(':blue[Fetched Reply successfully!]')
+                try:
+                    x = greeter.getreplies(title4_n)
+                    if (x > 0):
+                        st.write()
+                        st.write(':blue[Fetched Reply successfully!]')
+                    else:
+                        st.write('No Replies By ' + title_n)
+                except:
+                    st.write('Cannot retrieve Replies')
         elif get_selectbox == 'GetAllUsers':
             st.write('View All Users')
             get_button_clicked = st.button('Get Users')
             if get_button_clicked:
-                x=greeter.get_all_users()
-                st.write(':red[Read Users successfully!]')
-                for i in x:
-                    with st.expander(f':green[User: {i["user_tag"]}]'):
-                        # st.write(f':green[User: {i["user_tag"]}] ')
-                        st.write('**Username:** ' + i['name'])
-                        st.write('**User Tag:** ' + i['user_tag'])
-                        st.write('**Date Of Birth:** ' + str(i['Dob']))
-                        st.write('**Email:** ' + i['registered_mail'])
-                        st.write('**Bio:** ' + i['Bio'])
-                        st.write('**Profile created on:** ' + str(i['created']))
-
+                try:
+                    x = greeter.get_all_users()
+                    if (x > 0):
+                        st.write(':red[Read Users successfully!]')
+                        for i in x:
+                            with st.expander(f':green[User: {i["user_tag"]}]'):
+                                # st.write(f':green[User: {i["user_tag"]}] ')
+                                st.write('**Username:** ' + i['name'])
+                                st.write('**User Tag:** ' + i['user_tag'])
+                                st.write('**Date Of Birth:** ' + str(i['Dob']))
+                                st.write('**Email:** ' + i['registered_mail'])
+                                st.write('**Bio:** ' + i['Bio'])
+                                st.write('**Profile created on:** ' + str(i['created']))
+                    else:
+                        st.write('No Users yet in the application')
+                except:
+                    st.write('Cannot retrieve Users')
         elif get_selectbox == 'GetAllPosts':
             st.write('View All Posts')
             get_button_clicked = st.button('Get Posts')
             if get_button_clicked:
-                y=greeter.get_all_posts()
-                for i in y:
-                    with st.expander(f':green[Post Id: {i["postid"]}]'):
-                        # st.write(f':green[User: {i["user_tag"]}] ')
-                        # st.write('**Postid:** ' + i['postid'])
-                        st.write('**HashTags:** ' + i['hash_tags'])
-                        st.write('**Mentions:** ' + i['mentions'])
-                        st.write('**Tweet Content:** ' + i['tweet_content'])
-                st.write(':blue[Read Posts successfully!]')
+                try:
+                    y = greeter.get_all_posts()
+                    if (y > 0):
+                        for i in y:
+                            with st.expander(f':green[Post Id: {i["postid"]}]'):
+                                # st.write(f':green[User: {i["user_tag"]}] ')
+                                # st.write('**Postid:** ' + i['postid'])
+                                st.write('**HashTags:** ' + i['hash_tags'])
+                                st.write('**Mentions:** ' + i['mentions'])
+                                st.write('**Tweet Content:** ' + i['tweet_content'])
+                        st.write(':blue[Read Posts successfully!]')
+                    else:
+                        st.write('No posts yet in the application')
+                except:
+                    st.write('Cannot retrieve Posts')
         elif get_selectbox == 'PostByUser':
             st.write('View All Posts By User')
             title_n = st.text_input('Username', '')
             get_button_clicked = st.button('Get Posts')
             if get_button_clicked:
-                y=greeter.postbyuser(title_n)
-                if len(y)==0:
-                    st.write(":red[User hasn't posted Anything Yet]")
-                for i in y:
-                    with st.expander(f':green[Post Id: {i["postid"]}]'):
-                        # st.write(f':green[User: {i["user_tag"]}] ')
-                        # st.write('**Postid:** ' + i['postid'])
-                        st.write('**HashTags:** ' + i['hash_tags'])
-                        st.write('**Mentions:** ' + i['mentions'])
-                        st.write('**Tweet Content:** ' + i['tweet_content'])
-                st.write(':blue[Read Posts successfully!]')
-        # elif add_selectbox =='GetAllUsers':
+                try:
+                    y = greeter.postbyuser(title_n)
+                    if len(y) == 0:
+                        st.write(":red[User hasn't posted Anything Yet]")
+                    for i in y:
+                        with st.expander(f':green[Post Id: {i["postid"]}]'):
+                            # st.write(f':green[User: {i["user_tag"]}] ')
+                            # st.write('**Postid:** ' + i['postid'])
+                            st.write('**HashTags:** ' + i['hash_tags'])
+                            st.write('**Mentions:** ' + i['mentions'])
+                            st.write('**Tweet Content:** ' + i['tweet_content'])
+                    st.write(':blue[Read Posts successfully!]')
+                # elif add_selectbox =='GetAllUsers':
+                except:
+                    st.write('Cannot retrieve Posts of' + title_n)
         #
         elif get_selectbox == 'None':
             pass
         st.subheader('Deletion Tasks', divider='rainbow')
         delete_selectbox = st.selectbox(
             'What Deleting task would you like to perform?',
-            ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote','DeleteReply')
+            ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote',
+             'DeleteReply')
         )
 
         # insert_button_clicked = st.sidebar.button('Insert')
@@ -847,8 +933,8 @@ if __name__ == "__main__":
             if get_button_clicked:
                 # if()
                 try:
-                    x=greeter.getuser(title_n)
-                    name=x['name']
+                    x = greeter.getuser(title_n)
+                    name = x['name']
                     greeter.deluser(title_n)
                     st.write(':blue[User Deleted successfully!]')
                 except:
@@ -863,48 +949,66 @@ if __name__ == "__main__":
             # title0 = st.text_input('DOB date', '')
             get_button_clicked = st.button('Delete Post')
             if get_button_clicked:
-                greeter.delpost(title_n)
-                st.write(':blue[Post Deleted successfully!]')
+                try:
+                    greeter.delpost(title_n)
+                    st.write(':blue[Post Deleted successfully!]')
+                except:
+                    st.write('Cannot delete Post :' + title_n)
         elif delete_selectbox == 'RemoveLikes':
             st.write('Stop Liking a Post')
             title_n = st.text_input('User name', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Remove Liked Post')
             if get_button_clicked:
-                greeter.dellikepost(title_n,title4_n)
-                st.write(':blue[Liked Post Removed successfully!]')
+                try:
+                    greeter.dellikepost(title_n, title4_n)
+                    st.write(':blue[Post Like Removed successfully!]')
+                except:
+                    st.write('Cannot remove like of the post :' + title4_n)
         elif delete_selectbox == 'StopFollowing':
             st.write('Stop Followers')
             title_n = st.text_input('Username 1', '')
             # title4_n = st.text_input('Username 2', '')
             get_button_clicked = st.button('Stop Following')
             if get_button_clicked:
-                greeter.delfollowuser(title_n)
-                st.write(f':blue[Showing Followers {title_n} successfully!]')
+                try:
+                    greeter.delfollowuser(title_n)
+                    st.write(f':blue[Showing Followers {title_n} successfully!]')
+                except:
+                    st.write('Unable to unfollow')
         elif delete_selectbox == 'DeleteReposts':
             st.write('Get Repost')
             title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Delete Repost')
             if get_button_clicked:
-                greeter.delrepost(title_n, title4_n)
-                st.write(':blue[Added Repost successfully!]')
+                try:
+                    greeter.delrepost(title_n, title4_n)
+                    st.write(':blue[Added Repost successfully!]')
+                except:
+                    st.write('Unable to Delete Reposts')
         elif delete_selectbox == 'DeleteQuote':
             st.write('Added a Quote')
             title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Delete Quote')
             if get_button_clicked:
-                st.write(greeter.delquote(title_n, title4_n))
-                st.write(':blue[Added Quote successfully!]')
+                try:
+                    st.write(greeter.delquote(title_n, title4_n))
+                    st.write(':blue[Added Quote successfully!]')
+                except:
+                    st.write('Unable to Delete Quote')
         elif delete_selectbox == 'DeleteReply':
             st.write('View Replies for a post')
             title_n = st.text_input('Username', '')
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Delete Replies')
             if get_button_clicked:
-                st.write(greeter.delreply(title_n,title4_n))
-                st.write(':blue[Read Reply successfully!]')
+                try:
+                    st.write(greeter.delreply(title_n, title4_n))
+                    st.write(':blue[Read Reply successfully!]')
+                except:
+                    st.write('Unable to Delete Reply')
         # elif add_selectbox =='GetAllUsers':
         #
         elif delete_selectbox == 'None':
@@ -913,13 +1017,63 @@ if __name__ == "__main__":
         st.subheader('Updating Tasks', divider='rainbow')
         update_selectbox = st.selectbox(
             'What Updating task would you like to perform?',
-            ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote',
-             'DeleteReply')
+            ('None', 'UpdateUserBio', 'UpdateUsername', 'UpdateUserdob')
         )
+        if update_selectbox == 'UpdateUserdob':
+
+            st.write('Update user')
+            n1=st.text_input('Enter Username')
+            d = st.date_input("Updated date of birth", datetime.date(2022, 7, 6),
+                    min_value=datetime.date(1900, 1, 1),
+                    max_value=datetime.date(2050, 12, 31))
+            create_button_clicked = st.button('Create Post')
+            if create_button_clicked:
+                try:
+                    # st.write('Here sasa')
+                    x = greeter.updateuser(n1,'DOB', d=d)
+                    st.write("Successful")
+                except:
+                    st.write("An error occurred:")
+                    # st.write(e)
+
+
+        elif update_selectbox == 'UpdateUsername':
+            st.write('Update user')
+            n1 = st.text_input('Enter Username')
+            u = st.text_input('Enter new username','')
+            create_button_clicked = st.button('Create Post')
+            if create_button_clicked:
+                try:
+                    # st.write('Here sasa')
+                    x = greeter.updateuser(n1, 'Username', u=u)
+                    if x:
+                        st.write(':blue[User updated successfully!]')
+                    else:
+                        st.write('Incorrect details')
+                except:
+                    st.write("An error occurred:")
+        elif update_selectbox == 'UpdateUserBio':
+            st.write('Update user')
+            n1 = st.text_input('Enter Username')
+            b = st.text_input('Enter Bio','')
+            create_button_clicked = st.button('Create Post')
+            if create_button_clicked:
+                try:
+                    # st.write('Here sasa')
+                    x = greeter.updateuser(n1,'Bio', b=b)
+                    if x:
+                        st.write(':blue[User updated successfully!]')
+                    else:
+                        st.write('Incorrect details')
+                except Exception as e:
+                    st.write("An error occurred:")
+                    st.write(e)
 
     with tab2:
-        name=st.text_input('Enter your Username','')
-        buttona=st.button("Recommend Followers")
+        # name=st.text_input('Enter your Username','')
+        name=una
+        # buttona=st.button("Recommend Followers")
+        buttona=True
         if(buttona):
             x=greeter.recommendfollowers(name)
             for i in x:
@@ -932,8 +1086,10 @@ if __name__ == "__main__":
                     st.write('**Bio:** ' + i['Bio'])
                     st.write('**Profile created on:** ' + str(i['created']))
     with tab3:
-        name = st.text_input('Enter Username', '')
-        buttona = st.button("Get Foryou feed")
+        # name = st.text_input('Enter Username', '')
+        name=una
+        # buttona = st.button("Get Foryou feed")
+        buttona = True
         if (buttona):
             import time
             progress_text = "Operation in progress. Please wait."
@@ -963,8 +1119,10 @@ if __name__ == "__main__":
                         st.write('**Mentions:** ' + j['mentions'])
                         st.write('**Tweet Content:** ' + j['tweet_content'])
     with tab4:
-        name = st.text_input('Enter UserName', '')
-        buttona = st.button("Get Following feed")
+        # name = st.text_input('Enter UserName', '')
+        name=una
+        # buttona = st.button("Get Following feed")
+        buttona = True
         if (buttona):
             x = greeter.FollowingFeed(name)
 
@@ -993,35 +1151,7 @@ if __name__ == "__main__":
 
     # greeter.updateuser('Joshua Anderson')
     # greeter.create_replies()
-    with tab0:
-        import streamlit as st
-        import numpy as np
 
-        una = st.text_input("Userid", "")
-        with st.chat_message("user"):
-
-            st.write("""
-Our choice of Neo4j as the database for our application is primarily due to its effectiveness in managing social media networks. Neo4j's strength lies in its ability to handle a substantial number of connections and relationships, particularly with properties. This flexibility is crucial for our database modeling, as it differs from traditional relational databases, which are more rigid in their schema design, and it is mainly used for organized data.
-
-Functionality Highlights:
-
-- Adding and Managing User Accounts: Users can easily create accounts using their email, ensuring a seamless onboarding process. Additionally, they can delete their accounts if they choose to leave the platform, with a secure login feature providing an extra layer of authentication and security.
-
-- Following Page: Users have access to a centralized feed displaying posts from the accounts they follow, facilitating easy access to the latest updates from their network.
-
-- ForYou Page Recommendations: Our application offers a personalized "ForYou" page that recommends content based on the likes of their followers, as well as their posts, reposts, and replies. This feature enhances the user experience by providing tailored content suggestions.
-
-- Follow Recommendations: Users can explore new accounts to follow through recommendations that extend 1-2 hops from their followers, expanding their network and introducing them to potentially interesting content.
-
-- Profile View: Users can explore other users' profiles by typing in their names. This feature allows users to view typed posts, reposts, replies, quotes, likes, and more, offering a comprehensive view of their activity on the platform.
-
-- Followers and Following: Our application allows users to see who is following a particular user, as well as whom that user is following. This transparency promotes stronger connections within the network.
-
-- Birthday Balloons: A unique and delightful feature where balloons pop up on a user's profile on their birthday, adding a fun and personal touch to the application, making it more engaging and interactive.
-
-- Creating and Managing Posts: Users can create posts, reply to, repost, and quote posts made by other users. This interactive feature fosters lively conversations and information sharing within the platform.
-"""
-                     )
 
     with tab5:
         # name = st.text_input('UserName', '')
