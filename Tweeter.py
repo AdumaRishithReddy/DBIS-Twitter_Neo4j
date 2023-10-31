@@ -4,7 +4,7 @@ from neo4j import GraphDatabase
 import streamlit as st
 import datetime
 import numpy as np
-
+import re
 class HelloWorldExample:
 
     def __init__(self, uri, user, password):
@@ -56,8 +56,8 @@ class HelloWorldExample:
     # CREATE OR ADD NEW ENTRIES(POST)
     def adduser(self,name,bio,usertag,mail,year,month,date):
         with self.driver.session() as session:
-            session.write_transaction(self._add_user,name,bio,usertag,mail,year,month,date)
-
+            result=session.write_transaction(self._add_user,name,bio,usertag,mail,year,month,date)
+            return result
     def addpost(self, user,tags,mentions,content):
         with self.driver.session() as session:
             session.write_transaction(self._add_post, user,tags,mentions,content)
@@ -133,6 +133,10 @@ class HelloWorldExample:
             liked = session.write_transaction(self._get_liked, user)
             return liked
 
+    def getfollowing(self, user):
+        with self.driver.session() as session:
+            follow = session.write_transaction(self._get_following, user)
+            return follow
     def getfollowers(self, user):
         with self.driver.session() as session:
             follow = session.write_transaction(self._get_followers, user)
@@ -203,6 +207,17 @@ class HelloWorldExample:
 
     # QUERIES FOR RESPECTIVE FUNCTIONS
 
+    def is_valid_email(self,email):
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        return re.match(pattern, email) is not None
+
+    def is_valid_age(self,created, DOB):
+        DOB_string = DOB.strftime("%Y-%m-%d")
+        dob = datetime.datetime.strptime(DOB_string, "%Y-%m-%d")
+        # created = datetime.strptime(created, "%Y-%m-%d")
+        age = created.year - dob.year - ((created.month, created.day) < (dob.month, dob.day))
+        return age >= 12
+
     def _add_user(self, tx,name,bio,usertag,registered_mail,DOB_year,DOB_month,DOB_date):
         # name = input("Enter name: ")
         # bio = input("Enter bio: ")
@@ -213,10 +228,16 @@ class HelloWorldExample:
         # DOB_date = int(input("Enter the date of birth"))
         DOB = datetime.date(DOB_year, DOB_month, DOB_date)
         created = datetime.datetime.now()
-        tx.run(
-            "CREATE (n:User{name:$name,user_tag:$usertag,Bio:$bio,registered_mail:$reg_mail,created:$created,Dob:$DOB})"
-            "RETURN n", name=name, usertag=usertag, bio=bio, reg_mail=registered_mail, created=created, DOB=DOB
-            )
+        if(self.is_valid_email(registered_mail) and self.is_valid_age(created,DOB)):
+
+            tx.run(
+                "CREATE (n:User{name:$name,user_tag:$usertag,Bio:$bio,registered_mail:$reg_mail,created:$created,Dob:$DOB})"
+                "RETURN n", name=name, usertag=usertag, bio=bio, reg_mail=registered_mail, created=created, DOB=DOB
+                )
+            return True
+        else:
+            st.write(":red[Invalid Email]")
+            return False
 
     def _add_post(self, tx, user,tags,mentions,content):
         created = datetime.datetime.now()
@@ -291,8 +312,12 @@ class HelloWorldExample:
                                  user=user)
             return [record for record in result]
 
-    def _get_followers(self, tx, user):
+    def _get_following(self, tx, user):
         result = tx.run("MATCH (u:User {name: $user})-[:FOLLOWS]->(p:User) RETURN p", user=user)
+        return [record['p'] for record in result]
+
+    def _get_followers(self, tx, user):
+        result = tx.run("MATCH (u:User {name: $user})<-[:FOLLOWS]-(p:User) RETURN p", user=user)
         return [record['p'] for record in result]
 
     def _get_reposts(self, tx, user, postid):
@@ -404,7 +429,7 @@ class HelloWorldExample:
     def _get_foryou_feed(self, tx, user):
         result = tx.run(
             "MATCH (p1:User {name: $user})-[:LIKES]->(posts:Post)<-[:LIKES]-(p2:User)-[:LIKES]->(similarPosts:Post) "
-            "WHERE p2 <> p1 AND p1>p2"
+            "WHERE p1.name > p2.name "
             "WITH p2, COLLECT(DISTINCT similarPosts) AS recommendations "
             "MATCH (p2)-[:LIKES]->(recommendedPosts:Post) "
             "WHERE NOT recommendedPosts IN recommendations "
@@ -429,6 +454,21 @@ class HelloWorldExample:
         with self.driver.session() as session:
             result = session.run("MATCH (u:User{name:$name1})-[:POSTED]->(m:Post) RETURN m", name1=name)
             return [record['m'] for record in result]
+
+    def quotebyuser(self, name):
+        with self.driver.session() as session:
+            result = session.run("MATCH (u:User{name:$name1})-[q:QUOTES]->(m:Post) RETURN q,m", name1=name)
+            return [(record['q'], record['m']) for record in result]
+
+    def repostbyuser(self, name):
+        with self.driver.session() as session:
+            result = session.run("MATCH (u:User{name:$name1})-[q:REPOSTED]->(m:Post) RETURN m,q", name1=name)
+            return [(record['q'], record['m']) for record in result]
+
+    def replybyuser(self, name):
+        with self.driver.session() as session:
+            result = session.run("MATCH (u:User{name:$name1})-[r:REPLIED]->(m:Post) RETURN r, m.postid", name1=name)
+            return [(record['r'], record['m.postid']) for record in result]
 
     def _create_follow(self, tx):
         users = self.get_all_users()
@@ -554,17 +594,19 @@ if __name__ == "__main__":
     #     greeter.delfollowuser('Joshua Anderson','Susan Thomas')
     #     print(greeter.getnumlikes('27'))
     st.title('Tweeter')
-    tab1, tab2, tab3,tab4 = st.tabs(["Basic Functions ", "Follower Recommendations", "For You Page","Following Page"])
+    tab0,tab1, tab2, tab3,tab4,tab5 = st.tabs(["Home","Basic Functions ", "Follower Recommendations", "For You Page","Following Page","User Profile"])
+    una=""
 
-    add_selectbox = st.sidebar.selectbox(
-        'What Insertion task would you like to perform?',
-        ('None','NewUser', 'NewPost', 'LikePost', 'FollowUser', 'NewRepost', 'NewQuote','NewReply')
-    )
 
     # insert_button_clicked = st.sidebar.button('Insert')
     # ins=insert_button_clicked
     # if ins:
     with tab1:
+        st.subheader('Insertion Tasks', divider='rainbow')
+        add_selectbox = st.selectbox(
+            'What Insertion task would you like to perform?',
+            ('None', 'NewUser', 'NewPost', 'LikePost', 'FollowUser', 'NewRepost', 'NewQuote', 'NewReply')
+        )
         if add_selectbox == 'NewUser':
             st.write('Create a new user')
             title = st.text_input('User name', '')
@@ -576,8 +618,11 @@ if __name__ == "__main__":
             title0 = st.text_input('DOB date', '')
             create_button_clicked = st.button('Create User')
             if create_button_clicked:
-                greeter.adduser(title, title4, title3,title5, int(title2), int(title1), int(title0))
-                st.write(':blue[User created successfully!]')
+                x=greeter.adduser(title, title4, title3,title5, int(title2), int(title1), int(title0))
+                if(x):
+                    st.write(':blue[User created successfully!]')
+                else:
+                    st.write('Incorrect details')
         elif add_selectbox == 'NewPost':
             st.write('Create a new post')
             title = st.text_input('User name', '')
@@ -637,8 +682,8 @@ if __name__ == "__main__":
                 st.write(':blue[Added Reply successfully!]')
         elif add_selectbox == 'None':
             pass
-
-        get_selectbox = st.sidebar.selectbox(
+        st.subheader('Fetching Tasks', divider='rainbow')
+        get_selectbox = st.selectbox(
             'What Insertion task would you like to perform?',
             ('None','GetUser', 'GetPost', 'GetLikedPosts', 'GetFollowers', 'GetReposts', 'GetQuote','GetReplies','GetAllUsers','GetAllPosts','PostByUser')
         )
@@ -672,13 +717,16 @@ if __name__ == "__main__":
             get_button_clicked = st.button('View Post')
             if get_button_clicked:
                 # print(title_n)
-                x = greeter.getpost(title_n)
-                # st.write(x)
-                st.write('**Postid:** ' + x['postid'])
-                st.write('**HashTags:** '+x['hash_tags'])
-                st.write('**Mentions:** '+x['mentions'])
-                st.write('**Tweet Content:** '+x['tweet_content'])
-                st.write(':blue[Post Read successfully!]')
+                try:
+                    x = greeter.getpost(title_n)
+                    # st.write(x)
+                    st.write('**Postid:** ' + x['postid'])
+                    st.write('**HashTags:** '+x['hash_tags'])
+                    st.write('**Mentions:** '+x['mentions'])
+                    st.write('**Tweet Content:** '+x['tweet_content'])
+                    st.write(':blue[Post Read successfully!]')
+                except:
+                    st.write('No such post')
         elif get_selectbox == 'GetLikedPosts':
             st.write('Posts Liked By User')
             title_n = st.text_input('User name', '')
@@ -686,13 +734,16 @@ if __name__ == "__main__":
             get_button_clicked = st.button('View Liked Posts')
             st.write(title_n)
             if get_button_clicked:
-                x = greeter.getlikedposts(title_n)
-                # st.write(x)
-                # st.write(len(x))
-                for i in range(len(x)):
-                    st.write("**Postid** " + x[i][0])
-                    st.write("**Content:** " + x[i][1])
-                st.write(':blue[Liked Post Read successfully!]')
+                try:
+                    x = greeter.getlikedposts(title_n)
+                    # st.write(x)
+                    # st.write(len(x))
+                    for i in range(len(x)):
+                        st.write("**Postid** " + x[i][0])
+                        st.write("**Content:** " + x[i][1])
+                    st.write(':blue[Liked Post Read successfully!]')
+                except:
+                    st.write('No Liked post')
         elif get_selectbox == 'GetFollowers':
             st.write('Get Followers')
             title_n = st.text_input('Username 1', '')
@@ -720,7 +771,7 @@ if __name__ == "__main__":
             title4_n = st.text_input('Post Id', '')
             get_button_clicked = st.button('Get Quote')
             if get_button_clicked:
-                x = st.write(greeter.getquote(title_n, title4_n))
+                x = greeter.getquote(title_n, title4_n)
                 st.write(x)
                 st.write(':blue[Added Quote successfully!]')
         elif get_selectbox == 'GetReplies':
@@ -780,8 +831,8 @@ if __name__ == "__main__":
         #
         elif get_selectbox == 'None':
             pass
-
-        delete_selectbox = st.sidebar.selectbox(
+        st.subheader('Deletion Tasks', divider='rainbow')
+        delete_selectbox = st.selectbox(
             'What Deleting task would you like to perform?',
             ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote','DeleteReply')
         )
@@ -859,6 +910,13 @@ if __name__ == "__main__":
         elif delete_selectbox == 'None':
             pass
 
+        st.subheader('Updating Tasks', divider='rainbow')
+        update_selectbox = st.selectbox(
+            'What Updating task would you like to perform?',
+            ('None', 'DeleteUser', 'DeletePost', 'RemoveLikes', 'StopFollowing', 'DeleteReposts', 'DeleteQuote',
+             'DeleteReply')
+        )
+
     with tab2:
         name=st.text_input('Enter your Username','')
         buttona=st.button("Recommend Followers")
@@ -877,13 +935,52 @@ if __name__ == "__main__":
         name = st.text_input('Enter Username', '')
         buttona = st.button("Get Foryou feed")
         if (buttona):
+            import time
+            progress_text = "Operation in progress. Please wait."
+            my_bar = st.progress(0, text=progress_text)
+
+            for percent_complete in range(100):
+                time.sleep(0.01)
+                my_bar.progress(percent_complete + 1, text=progress_text)
+            time.sleep(1)
+            my_bar.empty()
             x=greeter.ForYouFeed(name)
-            # ias=set(x)
+
             # x=list(ias)
-            st.write(type(x))
-            for i in x:
+            # st.write(type(x))
+            lst=[]
+            for k in x:
+                lst.append(k[0])
+            lst=set(lst)
+            # st.write(lst)
+            for j in lst:
+
                 # st.write(i)
-                for j in i:
+                    with st.expander(f':green[Post Id: {j["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        st.write('**Postid:** ' + j['postid'])
+                        st.write('**HashTags:** ' + j['hash_tags'])
+                        st.write('**Mentions:** ' + j['mentions'])
+                        st.write('**Tweet Content:** ' + j['tweet_content'])
+    with tab4:
+        name = st.text_input('Enter UserName', '')
+        buttona = st.button("Get Following feed")
+        if (buttona):
+            x = greeter.FollowingFeed(name)
+
+            # x=list(ias)
+            # st.write(type(x))
+            # lst = []
+            # for k in x:
+            #     lst.append(k[0])
+            # lst = set(lst)
+            # st.write(x)
+            for j in x:
+
+                if j is None:
+                    # st.write(j)
+                    pass
+                else:
                     with st.expander(f':green[Post Id: {j["postid"]}]'):
                         # st.write(f':green[User: {i["user_tag"]}] ')
                         st.write('**Postid:** ' + j['postid'])
@@ -896,4 +993,152 @@ if __name__ == "__main__":
 
     # greeter.updateuser('Joshua Anderson')
     # greeter.create_replies()
+    with tab0:
+        import streamlit as st
+        import numpy as np
+
+        una = st.text_input("Userid", "")
+        with st.chat_message("user"):
+
+            st.write("""
+Our choice of Neo4j as the database for our application is primarily due to its effectiveness in managing social media networks. Neo4j's strength lies in its ability to handle a substantial number of connections and relationships, particularly with properties. This flexibility is crucial for our database modeling, as it differs from traditional relational databases, which are more rigid in their schema design, and it is mainly used for organized data.
+
+Functionality Highlights:
+
+- Adding and Managing User Accounts: Users can easily create accounts using their email, ensuring a seamless onboarding process. Additionally, they can delete their accounts if they choose to leave the platform, with a secure login feature providing an extra layer of authentication and security.
+
+- Following Page: Users have access to a centralized feed displaying posts from the accounts they follow, facilitating easy access to the latest updates from their network.
+
+- ForYou Page Recommendations: Our application offers a personalized "ForYou" page that recommends content based on the likes of their followers, as well as their posts, reposts, and replies. This feature enhances the user experience by providing tailored content suggestions.
+
+- Follow Recommendations: Users can explore new accounts to follow through recommendations that extend 1-2 hops from their followers, expanding their network and introducing them to potentially interesting content.
+
+- Profile View: Users can explore other users' profiles by typing in their names. This feature allows users to view typed posts, reposts, replies, quotes, likes, and more, offering a comprehensive view of their activity on the platform.
+
+- Followers and Following: Our application allows users to see who is following a particular user, as well as whom that user is following. This transparency promotes stronger connections within the network.
+
+- Birthday Balloons: A unique and delightful feature where balloons pop up on a user's profile on their birthday, adding a fun and personal touch to the application, making it more engaging and interactive.
+
+- Creating and Managing Posts: Users can create posts, reply to, repost, and quote posts made by other users. This interactive feature fosters lively conversations and information sharing within the platform.
+"""
+                     )
+
+    with tab5:
+        # name = st.text_input('UserName', '')
+        # st.write(una)
+        name=una
+        buttona = True
+        if (buttona):
+            st.subheader('User Details', divider='rainbow')
+            try:
+                x = greeter.getuser(name)
+                st.write('**Username:** ' + x['name'])
+                st.write('**User Tag:** ' + x['user_tag'])
+                st.write('**Date Of Birth:** ' + str(x['Dob']))
+                st.write('**Email:** ' + x['registered_mail'])
+                st.write('**Bio:** ' + x['Bio'])
+                st.write('**Profile created on:** ' + str(x['created']))
+                # st.write(str(x['Dob'].month) +" "+ str(x['Dob'].day))
+                if(x['Dob'].month==datetime. datetime. today().month and x['Dob'].day==datetime. datetime. today().day):
+                    st.balloons()
+                # st.write(type(greeter.getuser(title_n)))
+                st.write(':blue[User Read successfully!]')
+            except:
+                st.write("no such user present")
+            st.subheader('Following', divider='rainbow')
+            try:
+                x=greeter.getfollowing(name)
+                for i in x:
+                    with st.expander(f':green[User:{i["name"]}]'):
+                        # st.write('**Username:** ' + i['name'])
+                        st.write('**User Tag:** ' + i['user_tag'])
+                        st.write('**Date Of Birth:** ' + str(i['Dob']))
+                        st.write('**Email:** ' + i['registered_mail'])
+                        st.write('**Bio:** ' + i['Bio'])
+                        st.write('**Profile created on:** ' + str(i['created']))
+            except:
+                st.write("not following anyone- loser")
+            st.subheader('Followers', divider='rainbow')
+            try:
+                x=greeter.getfollowers(name)
+                for i in x:
+                    with st.expander(f':green[User:{i["name"]}]'):
+                        # st.write('**Username:** ' + i['name'])
+                        st.write('**User Tag:** ' + i['user_tag'])
+                        st.write('**Date Of Birth:** ' + str(i['Dob']))
+                        st.write('**Email:** ' + i['registered_mail'])
+                        st.write('**Bio:** ' + i['Bio'])
+                        st.write('**Profile created on:** ' + str(i['created']))
+            except:
+                st.write("no one will ever follow you- loser")
+                # print(e)
+            st.subheader('User Posts', divider='rainbow')
+            try:
+                x = greeter.postbyuser(name)
+                # st.write(x)
+                for i in x:
+                    with st.expander(f':green[Post Id: {i["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        st.write('**Postid:** ' + i['postid'])
+                        st.write('**HashTags:** ' + i['hash_tags'])
+                        st.write('**Mentions:** ' + i['mentions'])
+                        st.write('**Tweet Content:** ' + i['tweet_content'])
+            except:
+                st.write('No such post')
+            st.subheader('User Quotes', divider='rainbow')
+            try:
+                x = greeter.quotebyuser(name)
+                # st.write(x)
+                for i in x:
+                    with st.expander(f':green[Quoted the Post: {i[1]["postid"]} ]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        # st.write('**Postid:** ' + i['postid'])
+                        st.write('**Content:** ' + i[0]['content'])
+                        st.write('**Media:** ' + i[0]['media'])
+                        # st.write('**Tweet Content:** ' + i['tweet_content'])
+            except:
+                st.write('No such quotes')
+            st.subheader('User Reposts', divider='rainbow')
+            try:
+                # st.write("asd")
+                x = greeter.repostbyuser(name)
+                # st.write(x)
+                for i in x:
+                    # st.write(i)
+                    with st.expander(f':green[Repost to Post: {i[1]["postid"]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        # st.write('**Postid:** ' + i['postid'])
+                        st.write('**Postid:** ' + i[1]['postid'])
+                        st.write('**HashTags:** ' + i[1]['hash_tags'])
+                        st.write('**Mentions:** ' + i[1]['mentions'])
+                        st.write('**Tweet Content:** ' + i[1]['tweet_content'])
+                        # st.write('**Tweet Content:** ' + i['tweet_content'])
+            except Exception as e:
+                print(e)
+                st.write('No such reposts')
+            st.subheader('User Replies', divider='rainbow')
+            try:
+                x = greeter.replybyuser(name)
+                # st.write(x)
+                for i in x:
+                    # st.write(i)
+                    with st.expander(f':green[Reply To Post {i[1]}]'):
+                        # st.write(f':green[User: {i["user_tag"]}] ')
+                        # st.write('**Postid:** ' + i['postid'])
+                        st.write('**Content:** ' + i[0]['content'])
+                        st.write('**Media:** ' + i[0]['media'])
+                        # st.write('**Tweet Content:** ' + i['tweet_content'])
+            except:
+                st.write('No such reposts')
+
+            # st.toast('Warming up...')
+        # import time
+        # with st.spinner('Wait for it...'):
+        #     time.sleep(5)
+        # st.success('Done!')
+        # st.snow()
+        # with st.chat_message("assistant"):
+        #     st.write("Hello human")
+        # st.line_chart(np.random.randn(30, 3))
+
     greeter.close()
