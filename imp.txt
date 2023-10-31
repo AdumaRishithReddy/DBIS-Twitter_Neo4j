@@ -22,3 +22,7 @@ is_valid_age(created, DOB)
 if is_valid_age(created, DOB):
 	tx.run("CREATE (n:User{name:$name,user_tag:$usertag,Bio:$bio,registered_mail:$reg_mail,created:$created,Dob:$DOB})"
 		        "RETURN n",name=name,usertag=usertag,bio=bio,reg_mail=registered_mail,created=created,DOB=DOB)
+		        
+		        
+		        
+match (P:User) -[r:QUOTES]-> (m:Post) return r, m.postid
